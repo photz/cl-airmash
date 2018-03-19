@@ -1,0 +1,8 @@
+*~
+\#*
+\.\#*
+.purs-repl
+output
+node_modules
+bower_components
+.sass-cache
