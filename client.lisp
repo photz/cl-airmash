@@ -1,13 +1,14 @@
 (declaim (optimize (speed 0) (debug 3) (safety 3)))
-(load "~/quicklisp/setup.lisp")
+;;(load "~/quicklisp/setup.lisp")
 
 ;;(in-package :airmash-client)
 
 
 (ql:quickload :websocket-driver-client)
 (ql:quickload :alexandria)
-(ql:quickload "lisp-binary")
 (ql:quickload "flexi-streams")
+
+(require :lisp-binary)
 
 (defpackage airmash-client
   (:use :common-lisp :lisp-binary)
@@ -18,7 +19,7 @@
 (defun read-stream-content-into-byte-vector (stream &key ((%length length))
                                                          (initial-size 4096))
   "Return \"content\" of STREAM as freshly allocated (unsigned-byte 8) vector."
-  (check-type length (or null non-negative-integer))
+  ;;(check-type length (or null non-negative-integer))
   ;;(check-type initial-size positive-integer)
   (do ((buffer (make-array (or length initial-size)
                            :element-type '(unsigned-byte 8)))
@@ -52,6 +53,25 @@
   (command 6 :type (unsigned-byte 8))
   (num 0 :type (unsigned-byte 32)))
 
+(defbinary player-chat-command ()
+  (command 20 :type (unsigned-byte 8))
+  (text "" :type (counted-string 1 :external-format :utf8)))
+
+(defbinary player-ack-command ()
+  (command 5 :type (unsigned-byte 8)))
+
+
+;; UP 1
+;; DOWN 2
+;; LEFT 3
+;; RIGHT 4
+;; FIRE 5
+;; SPECIAL 6
+(defbinary player-key-command ()
+  (command 10 :type (unsigned-byte 8))
+  (seq 0 :type (unsigned-byte 32))
+  (key 0 :type (unsigned-byte 8))
+  (state 0 :type (unsigned-byte 8)))
 
 (defbinary player ()
   (id 0 :type (unsigned-byte 16))
@@ -80,6 +100,7 @@
 (defbinary server-backup-msg ())
 
 (defbinary server-ping-msg ()
+  (clock 0 :type (unsigned-byte 32))
   (num 0 :type (unsigned-byte 32)))
 
 (defbinary server-ping-result-msg ()
@@ -142,10 +163,21 @@
 
 (defbinary server-player-respawn-msg ())
 
+(defbinary server-player-kill-msg ()
+  (id 0 :type (unsigned-byte 16))
+  (killer 0 :type (unsigned-byte 16))
+  (pos-x 0 :type (unsigned-byte 16))
+  (pos-y 0 :type (unsigned-byte 16)))
+
+(defbinary server-mob-despawn-coords-msg ()
+  (id 0 :type (unsigned-byte 16))
+  (type 0 :type (unsigned-byte 8))
+  (pos-x 0 :type (unsigned-byte 16))
+  (pos-y 0 :type (unsigned-byte 16)))
+
 (defbinary server-chat-public-msg ()
   (id 0 :type (unsigned-byte 16))
   (text "" :type (counted-string 1)))
-
 
 (defbinary server-score-update-msg ()
   (id 0 :type (unsigned-byte 16))
@@ -155,9 +187,26 @@
   (totalkills 0 :type (unsigned-byte 32))
   (totaldeaths 0 :type (unsigned-byte 32)))
 
+(defbinary server-player-upgrade-msg ()
+  (upgrades 0 :type (unsigned-byte 16))
+  (type 0 :type (unsigned-byte 8))
+  (speed 0 :type (unsigned-byte 8))
+  (defense 0 :type (unsigned-byte 8))
+  (energy 0 :type (unsigned-byte 8))
+  (missile 0 :type (unsigned-byte 8)))
+
+(defbinary server-player-type ()
+  (id 0 :type (unsigned-byte 16))
+  (type 0 :type (unsigned-byte 8)))
+
 (defbinary server-player-powerup-msg ()
   (type 0 :type (unsigned-byte 8))
   (duration 0 :type (unsigned-byte 32)))
+
+(defbinary server-player-level-msg ()
+  (id 0 :type (unsigned-byte 16))
+  (type 0 :type (unsigned-byte 8))
+  (level 0 :type (unsigned-byte 8)))
 
 (defbinary score-board-entry ()
   (id 0 :type (unsigned-byte 16))
@@ -167,15 +216,45 @@
 (defbinary server-score-board-msg ()
   (data 0 :type (counted-array 2 score-board-entry)))
 
+(defbinary server-mob-update-msg ()
+  (clock 0 :type (unsigned-byte 32))
+  (id 0 :type (unsigned-byte 16))
+  (type 0 :type (unsigned-byte 8))
+  (pos-x 0 :type (unsigned-byte 16))
+  (pos-y 0 :type (unsigned-byte 16))
+  (speed-x 0 :type (unsigned-byte 16))
+  (speed-y 0 :type (unsigned-byte 16))
+  (accel-x 0 :type (unsigned-byte 16))
+  (accel-y 0 :type (unsigned-byte 16))
+  (max-speed 0 :type (unsigned-byte 16)))
+
+
 (defbinary server-mob-update-stationary-msg ()
   (id 0 :type (unsigned-byte 16))
   (mob-type 0 :type (unsigned-byte 8))
   (pos-x 0.0 :type (single-float))
   (pos-y 0.0 :type (single-float)))
 
+(defbinary server-mob-despawn-msg ()
+  (id 0 :type (unsigned-byte 16))
+  (type 0 :type (unsigned-byte 8)))
+
+
 (defbinary server-event-leavehorizon-msg ()
   (type 0 :type (unsigned-byte 8))
   (id 0 :type (unsigned-byte 16)))
+
+(defbinary server-event-boost-msg ()
+  (clock 0 :type (unsigned-byte 32))
+  (id 0 :type (unsigned-byte 16))
+  (boost 0 :type (unsigned-byte 8))
+  (pos-x 0 :type (unsigned-byte 24))
+  (pos-y 0 :type (unsigned-byte 24))
+  (rot 0 :type (unsigned-byte 16))
+  (speed-x 0 :type (unsigned-byte 16))
+  (speed-y 0 :type (unsigned-byte 16))
+  (energy 0 :type (unsigned-byte 16))
+  (energy-regen 0 :type (unsigned-byte 8)))
 
 (defbinary server-event-bounce-msg ()
   (clock 0 :type (unsigned-byte 32))
@@ -186,6 +265,7 @@
   (rotation 0 :type (unsigned-byte 16))
   (speed-x 0 :type (unsigned-byte 16))
   (speed-y 0 :type (unsigned-byte 16)))
+
 
 (defbinary server-msg ()
   (command 0 :type (unsigned-byte 8))
@@ -204,25 +284,25 @@
                           ((14) '(server-player-hit-msg))
                           ((15) '(server-player-respawn-msg))
                           ((16) '(server-placeholder-msg))
-                          ((17) '(server-placeholder-msg))
-                          ((18) '(server-placeholder-msg))
-                          ((19) '(server-placeholder-msg))
+                          ((17) '(server-player-kill-msg))
+                          ((18) '(server-player-upgrade-msg))
+                          ((19) '(server-player-type))
                           ((20) '(server-player-powerup-msg))
-                          ((21) '(server-placeholder-msg))
+                          ((21) '(server-player-level-msg))
                           ((30) '(server-placeholder-msg))
                           ((31) '(server-placeholder-msg))
                           ((32) '(server-placeholder-msg))
                           ((33) '(server-placeholder-msg))
                           ((40) '(server-placeholder-msg))
-                          ((41) '(server-placeholder-msg))
+                          ((41) '(server-event-boost-msg))
                           ((42) '(server-event-bounce-msg))
                           ((43) '(server-placeholder-msg))
                           ((44) '(server-event-leavehorizon-msg))
-                          ((60) '(server-placeholder-msg))
+                          ((60) '(server-mob-update-msg))
                           ((61) '(server-mob-update-stationary-msg))
-                          ((62) '(server-placeholder-msg))
-                          ((63) '(server-placeholder-msg))
-                          ((70) '(server-placeholder-msg))
+                          ((62) '(server-mob-despawn-msg))
+                          ((63) '(server-mob-despawn-coords-msg))
+                          ((70) '(server-chat-public-msg))
                           ((71) '(server-placeholder-msg))
                           ((72) '(server-placeholder-msg))
                           ((73) '(server-placeholder-msg))
@@ -234,8 +314,15 @@
                           ((83) '(server-placeholder-msg))
                           ((84) '(server-placeholder-msg))
                           ((90) '(server-placeholder-msg))
-                          ((91) '(server-chat-public-msg))))))
+                          ((91) '(server-placeholder-msg))))))
 
+
+(defun send-message (client player-command)
+  (let ((res (flexi-streams:with-output-to-sequence (out-raw)
+               (with-wrapped-in-bit-stream (out out-raw :byte-order :big-eendian)
+                 (write-binary player-command out)))))
+
+    (wsd:send-binary client res)))
 
 (defun on-message (client raw-msg)
 
@@ -250,32 +337,30 @@
 
     (let ((body (slot-value msg 'body)))
 
+      (when (typep body 'server-error-msg)
+        (format t "Error code: ~a~%" (slot-value body 'err)))
+
       (when (typep body 'server-ping-msg)
-
-        (let ((res (flexi-streams:with-output-to-sequence (out-raw)
-                     (with-wrapped-in-bit-stream (out out-raw :byte-order :big-endian)
-                       (write-binary (make-player-pong-command) out)))))
-
-
-          (format t "Got a ping, responding with a pong.~%")))
-
-          ;;(wsd:send-binary client res)))
+        (let* ((ping-num (slot-value body 'num))
+               (pong (make-player-pong-command :num ping-num)))
+          (format t "Got a ping (~a), responding with pong.~%" ping-num)
+          (format t "Responding with pong: ~a~%" pong)
+          (send-message client pong)))
 
       (when (typep body 'server-ping-result-msg)
-
         (format t "Got a ping of ~a~%" (slot-value body 'ping)))
 
+      (when (typep body 'server-player-update-msg)
+        (format t "Got a player update msg (~a|~a)~%"
+                (slot-value body 'pos-x)
+                (slot-value body 'pos-y)))
+
       (when (typep body 'server-login-msg)
-
-        (let ((res (flexi-streams:with-output-to-sequence (out-raw)
-                     (with-wrapped-in-bit-stream (out out-raw :byte-order :big-endian)
-                       (write-binary (make-server-chat-public-msg
-                                      :text "Hi folks!!")
-                                     out)))))
-
-          (wsd:send-binary client res))))))
-
-  
+        (let ((player-command (make-player-chat-command
+                               :text "Hi everybody!")))
+          (send-message client (make-player-ack-command))
+          ;;(send-message client player-command)
+          (format t "Server confirmed login.~%"))))))
 
 (defun on-error (err)
   (format t "error: ~a~%" err))
@@ -283,16 +368,17 @@
 (defun on-open (client)
 
   (let* ((player-command (make-player-login-command
-                          :name "johndoe22"
-                          :horizon-x 400
-                          :horizon-y 300
-                          :flag "GB"))
+                          :name "marilyn"
+                          :horizon-x (/ 1920 2)
+                          :horizon-y (/ 1920 2)
+                          :flag "GB")))
 
-         (res (flexi-streams:with-output-to-sequence (out-raw)
-                (with-wrapped-in-bit-stream (out out-raw :byte-order :big-endian)
-                  (write-binary player-command out)))))
+    (send-message client player-command)
 
-    (wsd:send-binary client res)))
+    (send-message client (make-player-key-command
+                          :seq 0
+                          :key 1
+                          :state 1))))
 
 
 (defun on-close (&key code reason)
@@ -300,16 +386,18 @@
 
 
 (defun main ()
-  (let* ((ws-server "wss://game-eu-s1.airma.sh/ffa1")
+  (let* ((host "wss://game-eu-s1.airma.sh/ffa1")
+         (test-host "ws://localhost:3000")
+         (ws-server host)
          (client (wsd:make-client ws-server
                                   :additional-headers
                                   '(("Origin" . "https://airma.sh")))))
 
     (format t "Running...~%")
 
+    (wsd:on :open client (alexandria:curry #'on-open client))
     (wsd:on :message client (alexandria:curry #'on-message client))
     (wsd:on :error client #'on-error)
-    (wsd:on :open client (alexandria:curry #'on-open client))
     (wsd:on :close client #'on-close)
 
     (wsd:start-connection client)
