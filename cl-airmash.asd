@@ -4,6 +4,7 @@
   :components ((:file "package")
                (:file "server-messages")
                (:file "player-messages")
+               (:file "handlers")
                (:file "ecs")
                (:file "client"))
   :depends-on (:lisp-binary
