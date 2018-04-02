@@ -9,5 +9,4 @@
   :depends-on (:lisp-binary
                :alexandria
                :flexi-streams
-               :qua
                :websocket-driver-client))
