@@ -1,6 +1,93 @@
 (declaim (optimize (speed 0) (debug 3) (safety 3)))
 (sb-ext:restrict-compiler-policy 'debug 3)
 
+(in-package :ecs)
+
+(defclass world ()
+  ((entity-id :initform 0)
+   (entities :initform (make-hash-table :test #'equal)
+             :accessor entities)
+   (transforms :initform (make-hash-table :test #'equal))
+   (users :initform (make-hash-table :test #'equal))))
+
+(defmethod has-entity ((w world) entity-id)
+  (gethash entity-id (entities w)))
+
+(defmethod add-entity ((w world) entity-id)
+  (check-type entity-id integer)
+  (let ((e (gethash entity-id (entities w))))
+    (if (not e)
+        (setf (gethash entity-id (entities w)) t)
+        (error (format nil "Entity ~a already exists~%" entity-id)))))
+
+
+(defmethod new-entity ((w world))
+  "Create a new entity and return it"
+  (let* ((id (slot-value w 'entity-id))
+         (entities (slot-value w 'entities)))
+
+    (setf (gethash id entities) t)
+
+    (incf (slot-value w 'entity-id))
+
+    (return-from new-entity id)))
+         
+(defmethod remove-entity ((w world) entity-id)
+  "Remove the given entity"
+  (remhash entity-id (slot-value w 'entities))
+  (remhash entity-id (slot-value w 'transforms))
+  (remhash entity-id (slot-value w 'users)))
+
+(defmethod set-component ((w world) entity-id component-type component)
+  "Attach a new component to the given entity"
+  (check-type entity-id integer)
+  (let ((sym (find-symbol (symbol-name component-type) 'ecs)))
+    (if (gethash entity-id (entities w))
+        ;; entity exists
+        (setf (gethash entity-id (slot-value w sym))
+              component)
+        (let ((known-ids
+
+               (loop
+                  for e-id being the hash-keys of (entities w)
+                  collect e-id)))
+
+          (error (format nil "entity ~a does not exist (~a)" entity-id known-ids))))))
+
+
+  
+(defmethod get-component ((w world) entity-id component-type)
+  (let ((sym (find-symbol (symbol-name component-type) 'ecs)))
+    (gethash entity-id (slot-value w sym))))
+
+
+(defmethod components-by-kw ((w world) kw)
+  (check-type kw keyword)
+  (let ((slot-sym (find-symbol (symbol-name kw) 'ecs)))
+    (slot-value w slot-sym)))
+
+(defmethod update-components ((w world) f c1 &rest cs)
+  "Applies the given function f to every entity that has all the requested
+components."
+  (let ((hts (mapcar (alexandria:curry #'components-by-kw w) cs)))
+    (maphash
+     #'(lambda (entity-id component)
+
+         (if (consp cs)
+
+             (loop
+                for ht being the elements of hts
+                for the-component = (gethash entity-id ht)
+                always the-component
+                collect the-component into the-components
+                finally (apply f (cons entity-id (cons 1.0 (cons component the-components)))))
+
+             ;; call directly if only one component is needed
+             (funcall f entity-id 1.0 component)))
+
+     (components-by-kw w c1))))
+
+
 (in-package :airmash-client)
 
 
@@ -107,9 +194,20 @@
 
 (defbinary server-command-reply-msg ())
 
-(defbinary server-player-new-msg ())
+(defbinary server-player-new-msg ()
+  (id 0 :type (unsigned-byte 16))
+  (status 0 :type (unsigned-byte 8))
+  (name "" :type (counted-string 1 :external-format :utf8))
+  (type 0 :type (unsigned-byte 8))
+  (team 0 :type (unsigned-byte 16))
+  (pos-x 0 :type (unsigned-byte 16))
+  (pos-y 0 :type (unsigned-byte 16))
+  (rot 0 :type (unsigned-byte 16))
+  (flag 0 :type (unsigned-byte 16))
+  (upgrades 0 :type (unsigned-byte 8)))
 
-(defbinary server-player-leave-msg ())
+(defbinary server-player-leave-msg ()
+  (id 0 :type (unsigned-byte 16)))
 
 (defbinary server-player-update-msg ()
   (clock 0 :type (unsigned-byte 32))
@@ -369,35 +467,87 @@
 (defmethod process (client world (body server-ping-msg))
   (let* ((ping-num (slot-value body 'num))
          (pong (make-player-pong-command :num ping-num)))
-    (format t "Got a ping (~a), responding with pong.~%" ping-num)
-    (format t "Responding with pong: ~a~%" pong)
     (send-message client pong)))
 
 (defmethod process (client world (body server-ping-result-msg))
   (format t "Got a ping of ~a~%" (slot-value body 'ping)))  
 
 (defmethod process (client world (body server-player-update-msg))
-  (format t "Got a player update msg (~a|~a)~%"
-          (slot-value body 'pos-x)
-          (slot-value body 'pos-y)))
+  (let* ((user-id (slot-value body 'id))
+         (pos-x (slot-value body 'pos-x))
+         (pos-y (slot-value body 'pos-y))
+         (rot (slot-value body 'rotation))
 
-(defmethod process (client world (body server-player-hit-msg))
-  (send-message client (make-player-say-command
-                        :text "ouch")))
+         (trans (ecs:get-component world user-id :transforms)))
+
+    (setf (trans-x trans) pos-x)
+    (setf (trans-y trans) pos-y)
+    (setf (trans-rot trans) rot)))
+
+
+
+(defmethod process (client world (body server-player-hit-msg)))
+;;(send-message client (make-player-say-command
+;;:text "ouch")))
 
 
 (defmethod process (client world (body server-login-msg))
-  (let ((player-command (make-player-chat-command
-                         :text "Hi everybody!")))
-    (send-message client (make-player-ack-command)))
-  (format t "Server confirmed login.~%"))
+  (format t "Server confirmed login.~%")
+  ;; (let ((user-id (slot-value body 'id)))
+  ;;   (ecs:add-entity world user-id)
+  ;;   (ecs:set-component world user-id :transforms
+  ;;                      (make-trans :x 0 :y 0 :rot 0))
+  ;;   (ecs:set-component world user-id :users
+  ;;                      (make-user :name "me" :score 0)))
 
-(defmethod process (client world (body server-score-update-msg))
-  (format t "score updated~%"))
+  (let ((users (slot-value body 'players)))
+
+    (loop
+       for user being the elements of users
+       for user-id = (slot-value user 'id)
+       for name = (slot-value user 'name)
+       for pos-x = (slot-value user 'pos-x)
+       for pos-y = (slot-value user 'pos-y)
+       for rot = (slot-value user 'rotation)
+       do (let ()
+            (ecs:add-entity world user-id)
+            (ecs:set-component world user-id :transforms
+                               (make-trans :x pos-x
+                                           :y pos-y
+                                           :rot rot))
+            (ecs:set-component world user-id :users
+                               (make-user :name name
+                                          :score 0))))))
 
 
-(defmethod process (client world (body t))
-  (format t "no handler for ~a~%" body))
+(defmethod process (client world (body server-score-update-msg)))
+
+(defmethod process (client world (body server-player-leave-msg))
+  (let ((user-id (slot-value body 'id)))
+    (ecs:remove-entity world user-id)))
+
+(defmethod process (client world (body server-player-new-msg))
+  (let ((player-id (slot-value body 'id))
+        (player-name (slot-value body 'name))
+        (pos-x (slot-value body 'pos-x))
+        (pos-y (slot-value body 'pos-y))
+        (rot (slot-value body 'rot)))
+
+    (ecs:add-entity world player-id)
+    (ecs:set-component world player-id :transforms
+                       (make-trans :x pos-x
+                                   :y pos-y
+                                   :rot rot))
+    (ecs:set-component world player-id :users
+                       (make-user :name player-name
+                                  :score 0))))
+
+    
+
+
+
+(defmethod process (client world (body t)))
+  ;;(format t "no handler for ~a~%" body))
 
 
 
@@ -427,12 +577,21 @@
 (defun on-close (&key code reason)
   (format t "Closed because '~A' (Code=~A)~%" reason code))
 
+(defstruct trans x y rot)
+(defstruct user name score)
+
+(defun print-table (e-id td user transform)
+  (format t "~a is at ~a,~a and his score is ~a~%"
+          (user-name user)
+          (user-score user)
+          (trans-x transform)
+          (trans-y transform)))
 
 (defun main ()
-  (let* ((host "wss://game-eu-s1.airma.sh/ffa2")
+  (let* ((host "wss://game-eu-s1.airma.sh/ffa1")
          (test-host "ws://localhost:3000")
-         (ws-server test-host)
-         (world nil)
+         (ws-server host)
+         (world (make-instance 'ecs:world))
          (client (wsd:make-client ws-server
                                   :additional-headers
                                   '(("Origin" . "https://airma.sh")))))
@@ -442,14 +601,11 @@
     (wsd:on :error client #'on-error)
     (wsd:on :close client #'on-close)
 
-
     (wsd:start-connection client)
 
     (loop
-       do (let ((tick 0.25))
+       do (let ((tick 3))
             (sleep tick)
-            (send-message client (make-player-say-command
-                                  :text "hi there"))
-            (format t "bing~%")))
+            (ecs:update-components world #'print-table :users :transforms)))
 
     (format t "Exiting.~%")))
