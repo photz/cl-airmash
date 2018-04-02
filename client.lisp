@@ -1,21 +1,8 @@
 (declaim (optimize (speed 0) (debug 3) (safety 3)))
-;;(load "~/quicklisp/setup.lisp")
+(sb-ext:restrict-compiler-policy 'debug 3)
 
-;;(in-package :airmash-client)
-
-
-(ql:quickload :websocket-driver-client)
-(ql:quickload :alexandria)
-(ql:quickload "flexi-streams")
-
-
-(require :lisp-binary)
-
-(defpackage airmash-client
-  (:use :common-lisp :lisp-binary :qua)
-  (:export :main))
-  
 (in-package :airmash-client)
+
 
 (defun read-stream-content-into-byte-vector (stream &key ((%length length))
                                                          (initial-size 4096))
@@ -376,45 +363,45 @@
 
     (wsd:send-binary client res)))
 
-(defmethod process (client (body server-error-msg))
+(defmethod process (client world (body server-error-msg))
   (format t "Error code: ~a~%" (slot-value body 'err)))
 
-(defmethod process (client (body server-ping-msg))
+(defmethod process (client world (body server-ping-msg))
   (let* ((ping-num (slot-value body 'num))
          (pong (make-player-pong-command :num ping-num)))
     (format t "Got a ping (~a), responding with pong.~%" ping-num)
     (format t "Responding with pong: ~a~%" pong)
     (send-message client pong)))
 
-(defmethod process (client (body server-ping-result-msg))
+(defmethod process (client world (body server-ping-result-msg))
   (format t "Got a ping of ~a~%" (slot-value body 'ping)))  
 
-(defmethod process (client (body server-player-update-msg))
+(defmethod process (client world (body server-player-update-msg))
   (format t "Got a player update msg (~a|~a)~%"
           (slot-value body 'pos-x)
           (slot-value body 'pos-y)))
 
-(defmethod process (client (body server-player-hit-msg))
+(defmethod process (client world (body server-player-hit-msg))
   (send-message client (make-player-say-command
                         :text "ouch")))
 
 
-(defmethod process (client (body server-login-msg))
+(defmethod process (client world (body server-login-msg))
   (let ((player-command (make-player-chat-command
                          :text "Hi everybody!")))
     (send-message client (make-player-ack-command)))
   (format t "Server confirmed login.~%"))
 
-(defmethod process (client (body server-score-update-msg))
+(defmethod process (client world (body server-score-update-msg))
   (format t "score updated~%"))
 
 
-(defmethod process (client (body t))
+(defmethod process (client world (body t))
   (format t "no handler for ~a~%" body))
 
 
 
-(defun on-message (client raw-msg)
+(defun on-message (client world raw-msg)
 
   (let ((msg nil))
     (flexi-streams:with-input-from-sequence (my-new-stream raw-msg)
@@ -422,26 +409,19 @@
         (setf msg (read-binary 'server-msg in))))
 
     (let ((body (slot-value msg 'body)))
-      (process client body))))
+      (process client world body))))
 
 
 (defun on-error (err)
   (format t "error: ~a~%" err))
 
-(defun on-open (client)
-
-  (let* ((player-command (make-player-login-command
-                          :name "marilyn"
-                          :horizon-x (/ 1920 2)
-                          :horizon-y (/ 1920 2)
-                          :flag "GB")))
-
-    (send-message client player-command)
-
-    (send-message client (make-player-key-command
-                          :seq 0
-                          :key 1
-                          :state 1))))
+(defun on-open (client world)
+  (format t "Connected~%")
+  (send-message client (make-player-login-command
+                        :name "marilyn"
+                        :horizon-x (/ 1920 2)
+                        :horizon-y (/ 1920 2)
+                        :flag "GB")))
 
 
 (defun on-close (&key code reason)
@@ -451,20 +431,25 @@
 (defun main ()
   (let* ((host "wss://game-eu-s1.airma.sh/ffa2")
          (test-host "ws://localhost:3000")
-         (ws-server host)
+         (ws-server test-host)
+         (world nil)
          (client (wsd:make-client ws-server
                                   :additional-headers
                                   '(("Origin" . "https://airma.sh")))))
 
-    (format t "Running...~%")
-
-    (wsd:on :open client (alexandria:curry #'on-open client))
-    (wsd:on :message client (alexandria:curry #'on-message client))
+    (wsd:on :open client (alexandria:curry #'on-open client world))
+    (wsd:on :message client (alexandria:curry #'on-message client world))
     (wsd:on :error client #'on-error)
     (wsd:on :close client #'on-close)
 
+
     (wsd:start-connection client)
 
-    (read)
+    (loop
+       do (let ((tick 0.25))
+            (sleep tick)
+            (send-message client (make-player-say-command
+                                  :text "hi there"))
+            (format t "bing~%")))
 
     (format t "Exiting.~%")))
