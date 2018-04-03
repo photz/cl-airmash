@@ -11,16 +11,21 @@
 (defmethod process (client world (body server-ping-result-msg))
   (format t "Got a ping of ~a~%" (slot-value body 'ping)))  
 
+
 (defmethod process (client world (body server-player-update-msg))
   (let* ((user-id (slot-value body 'id))
          (pos-x (slot-value body 'pos-x))
          (pos-y (slot-value body 'pos-y))
+         (speed-x (slot-value body 'speed-x))
+         (speed-y (slot-value body 'speed-y))
          (rot (slot-value body 'rotation))
 
          (trans (ecs:get-component world user-id :transforms)))
 
     (setf (trans-x trans) pos-x)
     (setf (trans-y trans) pos-y)
+    (setf (trans-speed-x trans) speed-x)
+    (setf (trans-speed-y trans) speed-y)
     (setf (trans-rot trans) rot)))
 
 
@@ -28,6 +33,38 @@
 (defmethod process (client world (body server-player-hit-msg)))
 ;;(send-message client (make-player-say-command
 ;;:text "ouch")))
+
+(defmethod process (client world (body server-event-repel-msg))
+  (let ((users (slot-value body 'players)))
+    (loop
+       for user being the elements of users
+       for user-id = (slot-value user 'id)
+       for pos-x = (slot-value user 'pos-x)
+       for pos-y = (slot-value user 'pos-y)
+       for speed-x = (slot-value user 'speed-x)
+       for speed-y = (slot-value user 'speed-y)
+       for rot = (slot-value user 'rot)
+       for trans-comp = (ecs:get-component world user-id :transforms)
+       do (setf (trans-x trans-comp) pos-x
+                (trans-y trans-comp) pos-y
+                (trans-speed-x trans-comp) speed-x
+                (trans-speed-y trans-comp) speed-y
+                (trans-rot trans-comp) rot))))
+
+
+(defmethod process (client world (body server-event-boost-msg))
+  (let* ((user-id (slot-value body 'id))
+         (pos-x (slot-value body 'pos-x))
+         (pos-y (slot-value body 'pos-y))
+         (speed-x (slot-value body 'speed-x))
+         (speed-y (slot-value body 'speed-y))
+         (trans-comp (ecs:get-component world user-id :transforms)))
+
+    (setf (trans-x trans-comp) pos-x
+          (trans-y trans-comp) pos-y
+          (trans-speed-x trans-comp) speed-x
+          (trans-speed-y trans-comp) speed-y)))
+    
 
 
 (defmethod process (client world (body server-login-msg))
@@ -46,13 +83,22 @@
             (ecs:set-component world user-id :transforms
                                (make-trans :x pos-x
                                            :y pos-y
+                                           :speed-x 0.0
+                                           :speed-y 0.0
                                            :rot rot))
             (ecs:set-component world user-id :users
                                (make-user :name name
                                           :score 0))))))
 
 
-(defmethod process (client world (body server-score-update-msg)))
+(defmethod process (client world (body server-score-update-msg))
+  (let* ((user-id (slot-value body 'id))
+         (new-score (slot-value body 'score))
+         (user (ecs:get-component world user-id :users)))
+
+    (format t "new score: ~a~%" new-score)
+    (setf (user-score user) new-score)))
+
 
 (defmethod process (client world (body server-player-leave-msg))
   (let ((user-id (slot-value body 'id)))
@@ -69,10 +115,24 @@
     (ecs:set-component world player-id :transforms
                        (make-trans :x pos-x
                                    :y pos-y
+                                   :speed-x 0.0
+                                   :speed-y 0.0
                                    :rot rot))
     (ecs:set-component world player-id :users
                        (make-user :name player-name
                                   :score 0))))
+
+(defmethod process (client world (body server-player-respawn-msg))
+  (let* ((user-id (slot-value body 'id))
+         (pos-x (slot-value body 'pos-x))
+         (pos-y (slot-value body 'pos-y))
+         (rot (slot-value body 'rot))
+         (user (ecs:get-component world user-id :transforms)))
+
+    (setf (trans-x user) pos-x)
+    (setf (trans-y user) pos-y)
+    (setf (trans-rot user) rot)))
+
 
 
 

@@ -63,9 +63,10 @@
   (let ((slot-sym (find-symbol (symbol-name kw) 'ecs)))
     (slot-value w slot-sym)))
 
-(defmethod update-components ((w world) f c1 &rest cs)
+(defmethod update-components ((w world) td f c1 &rest cs)
   "Applies the given function f to every entity that has all the requested
 components."
+  (check-type td number)
   (let ((hts (mapcar (alexandria:curry #'components-by-kw w) cs)))
     (maphash
      #'(lambda (entity-id component)
@@ -77,9 +78,9 @@ components."
                 for the-component = (gethash entity-id ht)
                 always the-component
                 collect the-component into the-components
-                finally (apply f (cons entity-id (cons 1.0 (cons component the-components)))))
+                finally (apply f (cons entity-id (cons td (cons component the-components)))))
 
              ;; call directly if only one component is needed
-             (funcall f entity-id 1.0 component)))
+             (funcall f entity-id td component)))
 
      (components-by-kw w c1))))
