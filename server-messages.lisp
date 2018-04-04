@@ -23,6 +23,19 @@
   (let ((x (read-binary-type '(unsigned-byte 16) stream)))
     (values (/ (- x 32768) 32768.0) 2)))
 
+(defbinary keystate (:byte-order :big-endian)
+  ((pad right left down up) nil
+   :type (bit-field :raw-type (unsigned-byte 8)
+                    :member-types ((unsigned-byte 4)
+                                   (unsigned-byte 1)
+                                   (unsigned-byte 1)
+                                   (unsigned-byte 1)
+                                   (unsigned-byte 1)))))
+
+
+
+
+
 (defbinary player ()
   (id 0 :type (unsigned-byte 16))
   (status 0 :type (unsigned-byte 8))
@@ -85,7 +98,7 @@
 (defbinary server-player-update-msg ()
   (clock 0 :type (unsigned-byte 32))
   (id 0 :type (unsigned-byte 16))
-  (keystate 0 :type (unsigned-byte 8))
+  (keystate nil :type keystate)
   (upgrades 0 :type (unsigned-byte 8))
   (pos-x 0 :type float :reader #'read-coord-24)
   (pos-y 0 :type float :reader #'read-coord-24)
@@ -225,7 +238,7 @@
 
 (defbinary server-event-repel-msg-player ()
   (id 0 :type (unsigned-byte 16))
-  (keystate 0 :type (unsigned-byte 8))
+  (keystate nil :type keystate)
   (pos-x 0 :type float :reader #'read-coord-16)
   (pos-y 0 :type float :reader #'read-coord-16)
   (rot 0 :type float :reader #'read-rot)
@@ -275,7 +288,7 @@
 (defbinary server-event-bounce-msg ()
   (clock 0 :type (unsigned-byte 32))
   (id 0 :type (unsigned-byte 16))
-  (keystate 0 :type (unsigned-byte 16))
+  (keystate nil :type keystate)
   (pos-x 0 :type float :reader #'read-coord-16)
   (pos-y 0 :type float :reader #'read-coord-16)
   (rotation 0 :type float :reader #'read-rot)

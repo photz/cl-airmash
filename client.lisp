@@ -38,7 +38,7 @@
   (format t "Closed because '~A' (Code=~A)~%" reason code))
 
 (defstruct trans x y rot speed-x speed-y accel-x accel-y)
-(defstruct user name score)
+(defstruct user name score up down left right)
 
 (defun print-table (e-id td user transform)
   (check-type td number)

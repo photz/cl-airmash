@@ -19,14 +19,20 @@
          (speed-x (slot-value body 'speed-x))
          (speed-y (slot-value body 'speed-y))
          (rot (slot-value body 'rotation))
+         (trans (ecs:get-component world user-id :transforms))
+         (user-comp (ecs:get-component world user-id :users))
+         (new-keystate (slot-value body 'keystate)))
 
-         (trans (ecs:get-component world user-id :transforms)))
+    (setf (trans-x trans) pos-x
+          (trans-y trans) pos-y
+          (trans-speed-x trans) speed-x
+          (trans-speed-y trans) speed-y
+          (trans-rot trans) rot
 
-    (setf (trans-x trans) pos-x)
-    (setf (trans-y trans) pos-y)
-    (setf (trans-speed-x trans) speed-x)
-    (setf (trans-speed-y trans) speed-y)
-    (setf (trans-rot trans) rot)))
+          (user-up user-comp) (slot-value new-keystate 'up)
+          (user-down user-comp) (slot-value new-keystate 'down)
+          (user-left user-comp) (slot-value new-keystate 'left)
+          (user-right user-comp) (slot-value new-keystate 'right))))
 
 
 
@@ -45,11 +51,37 @@
        for speed-y = (slot-value user 'speed-y)
        for rot = (slot-value user 'rot)
        for trans-comp = (ecs:get-component world user-id :transforms)
+       for user-comp = (ecs:get-component world user-id :users)
+       for new-keystate = (slot-value user 'keystate)
        do (setf (trans-x trans-comp) pos-x
                 (trans-y trans-comp) pos-y
                 (trans-speed-x trans-comp) speed-x
                 (trans-speed-y trans-comp) speed-y
-                (trans-rot trans-comp) rot))))
+                (trans-rot trans-comp) rot
+
+                ;; Apply the new keystate
+                (user-up user-comp) (slot-value new-keystate 'up)
+                (user-down user-comp) (slot-value new-keystate 'down)
+                (user-left user-comp) (slot-value new-keystate 'left)
+                (user-right user-comp) (slot-value new-keystate 'right)))))
+
+(defmethod process (client world (body server-event-bounce-msg))
+  (let* ((user-id (slot-value body 'id))
+         (new-keystate (slot-value body 'keystate))
+         (user-comp (ecs:get-component world user-id :users))
+         (trans-comp (ecs:get-component world user-id :transforms)))
+
+    (setf (trans-x trans-comp) (slot-value body 'pos-x)
+          (trans-y trans-comp) (slot-value body 'pos-y)
+          (trans-speed-x trans-comp) (slot-value body 'speed-x)
+          (trans-speed-y trans-comp) (slot-value body 'speed-y)
+          (trans-rot trans-comp) (slot-value body 'rotation)
+
+          ;; Apply the new keystate
+          (user-up user-comp) (slot-value new-keystate 'up)
+          (user-down user-comp) (slot-value new-keystate 'down)
+          (user-left user-comp) (slot-value new-keystate 'left)
+          (user-right user-comp) (slot-value new-keystate 'right))))
 
 
 (defmethod process (client world (body server-event-boost-msg))
