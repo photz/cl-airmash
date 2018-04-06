@@ -1,18 +1,18 @@
 (in-package :airmash-client)
 
-(defmethod process (client world (body server-error-msg))
+(defmethod process (client (body server-error-msg) world)
   (format t "Error code: ~a~%" (slot-value body 'err)))
 
-(defmethod process (client world (body server-ping-msg))
+(defmethod process (client (body server-ping-msg) world)
   (let* ((ping-num (slot-value body 'num))
          (pong (make-player-pong-command :num ping-num)))
     (send-message client pong)))
 
-(defmethod process (client world (body server-ping-result-msg))
+(defmethod process (client (body server-ping-result-msg) world)
   (format t "Got a ping of ~a~%" (slot-value body 'ping)))  
 
 
-(defmethod process (client world (body server-player-update-msg))
+(defmethod process (client (body server-player-update-msg) world)
   (let* ((user-id (slot-value body 'id))
          (pos-x (slot-value body 'pos-x))
          (pos-y (slot-value body 'pos-y))
@@ -36,11 +36,11 @@
 
 
 
-(defmethod process (client world (body server-player-hit-msg)))
+(defmethod process (client (body server-player-hit-msg) world))
 ;;(send-message client (make-player-say-command
 ;;:text "ouch")))
 
-(defmethod process (client world (body server-event-repel-msg))
+(defmethod process (client (body server-event-repel-msg) world)
   (let ((users (slot-value body 'players)))
     (loop
        for user being the elements of users
@@ -65,7 +65,7 @@
                 (user-left user-comp) (slot-value new-keystate 'left)
                 (user-right user-comp) (slot-value new-keystate 'right)))))
 
-(defmethod process (client world (body server-event-bounce-msg))
+(defmethod process (client (body server-event-bounce-msg) world)
   (let* ((user-id (slot-value body 'id))
          (new-keystate (slot-value body 'keystate))
          (user-comp (ecs:get-component world user-id :users))
@@ -84,7 +84,7 @@
           (user-right user-comp) (slot-value new-keystate 'right))))
 
 
-(defmethod process (client world (body server-event-boost-msg))
+(defmethod process (client (body server-event-boost-msg) world)
   (let* ((user-id (slot-value body 'id))
          (pos-x (slot-value body 'pos-x))
          (pos-y (slot-value body 'pos-y))
@@ -99,9 +99,11 @@
     
 
 
-(defmethod process (client world (body server-login-msg))
+(defmethod process (client (body server-login-msg) world)
   (format t "Server confirmed login.~%")
   (let ((users (slot-value body 'players)))
+
+    (setf *my-user-id* (slot-value body 'id))
 
     (loop
        for user being the elements of users
@@ -123,7 +125,7 @@
                                           :score 0))))))
 
 
-(defmethod process (client world (body server-score-update-msg))
+(defmethod process (client (body server-score-update-msg) world)
   (let* ((user-id (slot-value body 'id))
          (new-score (slot-value body 'score))
          (user (ecs:get-component world user-id :users)))
@@ -132,11 +134,11 @@
     (setf (user-score user) new-score)))
 
 
-(defmethod process (client world (body server-player-leave-msg))
+(defmethod process (client (body server-player-leave-msg) world)
   (let ((user-id (slot-value body 'id)))
     (ecs:remove-entity world user-id)))
 
-(defmethod process (client world (body server-player-new-msg))
+(defmethod process (client (body server-player-new-msg) world)
   (let ((player-id (slot-value body 'id))
         (player-name (slot-value body 'name))
         (pos-x (slot-value body 'pos-x))
@@ -154,7 +156,7 @@
                        (make-user :name player-name
                                   :score 0))))
 
-(defmethod process (client world (body server-player-respawn-msg))
+(defmethod process (client (body server-player-respawn-msg) world)
   (let* ((user-id (slot-value body 'id))
          (pos-x (slot-value body 'pos-x))
          (pos-y (slot-value body 'pos-y))
@@ -168,7 +170,7 @@
 
 
 
-(defmethod process (client world (body t)))
+(defmethod process (client (body t) world))
   ;;(format t "no handler for ~a~%" body))
 
 

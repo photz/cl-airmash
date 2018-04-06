@@ -4,9 +4,10 @@
   :components ((:file "package")
                (:file "server-messages")
                (:file "player-messages")
+               (:file "client")
                (:file "handlers")
                (:file "ecs")
-               (:file "client"))
+               (:file "main"))
   :depends-on (#:lisp-binary
                #:alexandria
                #:flexi-streams
