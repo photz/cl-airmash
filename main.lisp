@@ -4,8 +4,22 @@
 (in-package :airmash-client)
 
 
-(defstruct trans x y rot speed-x speed-y accel-x accel-y)
-(defstruct user name score up down left right)
+(defstruct trans
+  (x 0.0 :type float)
+  (y 0.0 :type float)
+  (rot 0.0 :type float)
+  (speed-x 0.0 :type float)
+  (speed-y 0.0 :type float)
+  (accel-x 0.0 :type float)
+  (accel-y 0.0 :type float))
+
+(defstruct user
+  (name "" :type string)
+  (score 0 :type integer)
+  (up nil :type boolean)
+  (down nil :type boolean)
+  (left nil :type boolean)
+  (right nil :type boolean))
 
 
 
