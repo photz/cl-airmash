@@ -13,7 +13,7 @@
 
 (defun read-rot (stream)
   (let ((x (read-binary-type '(unsigned-byte 16) stream)))
-    (values (/ x 6553.6 2) 2)))
+    (values (/ x 6553.6) 2)))
 
 (defun read-speed (stream)
   (let ((x (read-binary-type '(unsigned-byte 16) stream)))
