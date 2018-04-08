@@ -29,6 +29,8 @@
            #:enable-vertex-array
            #:load-buffer-array))
 
+(defpackage #:shaders
+  (:use :3bgl-glsl/cl))
 
 (defpackage ecs
   (:use :cl)

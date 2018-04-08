@@ -1,6 +1,3 @@
-(declaim (optimize (speed 0) (debug 3) (safety 3)))
-(sb-ext:restrict-compiler-policy 'debug 3)
-
 (in-package :airmash-client)
 
 
@@ -22,7 +19,89 @@
   (right nil :type boolean))
 
 
+(defclass rendering-system-class ()
+  ((program :initform nil)
+   (vertex-buffer :initform nil)
+   (color-buffer :initform nil)))
+  
 
+(defmethod initialize-instance :after ((s rendering-system-class) &key)
+  (gl:enable :depth-test :cull-face)
+  (gl:depth-func :less)
+  (gl:clear-color 0 0 0 0)
+
+  (let ((buffers (gl:gen-buffers 2))
+        (vertex-array (gl:gen-vertex-array))
+        (vshader (3bgl-shaders:generate-stage :vertex 'shaders::vertex :version 330))
+        (fshader (3bgl-shaders:generate-stage :fragment 'shaders::fragment :version 330)))
+
+    (print vshader)
+    (print fshader)
+
+    (setf (slot-value s 'program)
+          (opengl-helper:link-program vshader fshader))
+
+    (setf (slot-value s 'vertex-buffer)
+          (elt buffers 0))
+
+    (setf (slot-value s 'color-buffer)
+          (elt buffers 1))
+
+    (gl:bind-vertex-array vertex-array)
+    (gl:bind-buffer :array-buffer (slot-value s 'vertex-buffer))
+    (opengl-helper:load-buffer-array #(0.1 0.0 0.1
+                                       0.0 0.0 -.1
+                                       -0.1 0.0 0.1))
+
+
+    (gl:bind-buffer :array-buffer (slot-value s 'color-buffer))
+    (opengl-helper:load-buffer-array #(1.0 0.0 0.0
+                                       0.0 1.0 0.0
+                                       0.0 0.0 1.0))))
+
+(defmethod run-system ((s rendering-system-class) world)
+  (gl:clear :color-buffer-bit :depth-buffer-bit)
+  (gl:use-program (slot-value s 'program))
+  (let* ((camera (make-vec3 4 10 3))
+         (angle 0.0)
+         (view (look-at (mvprod (rotation (d->r angle) #(0 1 0)) camera)
+                        #(0 0 0) 
+                        #(0 1 0)))
+         (projection (perspective 45.0 (/ 4.0 3.0) 0.1 300.0))
+         (program (slot-value s 'program)))
+
+
+    (opengl-helper:enable-vertex-array 0 (slot-value s 'vertex-buffer))
+    (opengl-helper:enable-vertex-array 1 (slot-value s 'color-buffer))
+    
+    (ecs:update-components
+     world
+     1
+     #'(lambda (entity-id td transform)
+         (let* ((pos-x (trans-x transform))
+                (pos-y (trans-y transform))
+                (scale 1000.0)
+                (mapped-x (/ pos-x scale))
+                (mapped-y (/ pos-y scale))
+                (the-rot (rotation (- (trans-rot transform)) #(0 1 0)))
+                (the-transl (translation mapped-x 0.01 mapped-y))
+                (modelmat (mprod the-transl the-rot))
+                
+                (mvp2 (mprod projection (mprod view modelmat))))
+
+           (gl:uniform-matrix (gl:get-uniform-location program "mvp")
+                              4 `#(,mvp2) nil)
+
+           (gl:draw-arrays :triangles 0 3)))
+
+     :transforms)
+
+    (gl:disable-vertex-attrib-array 0)
+    (gl:disable-vertex-attrib-array 1)))
+
+
+
+    
 
 (defun print-table (e-id td user transform)
   (check-type td number)
@@ -33,106 +112,46 @@
           (user-score user)
           (trans-rot transform)))
 
-(defun update-trans (e-id td transform)
+(defun angle-to-vec (angle)
+  (let* ((x (sin angle))
+         (y (- (cos angle)))
+         (mag (sqrt (+ (expt x 2) (expt y 2)))))
+    (values (/ x mag) (/ y mag))))
+         
+           
+(defun update-trans (e-id td user transform)
   (check-type td number)
-(defparameter *tutorial4-shader-source* 
-"#version 330 core
-layout(location = 0) in vec3 in_Position;
-layout(location = 1) in vec3 in_Color;
-uniform mat4 MVP;
-out vec3 ex_Color;
-void main() {
-  gl_Position = MVP * vec4(in_Position, 1.0);
-  ex_Color = in_Color;
-}")
+  (check-type (user-up user) boolean)
+  (check-type (user-down user) boolean)
+  (let* ((vel 330.0))
 
-(defparameter *tutorial4-fragment-source*
-"#version 330 core
-in vec3 ex_Color;
-out vec3 out_Color;
-void main() {
-  out_Color = ex_Color;
-}")
+    (multiple-value-bind (x y) (angle-to-vec (trans-rot transform))
+      (when (or (user-up user) (user-down user))
+        (incf (trans-x transform)
+              (* (/ td 1000.0) vel x))
+
+        (incf (trans-y transform)
+              (* (/ td 1000.0) vel y)))))
+
+  (let ((rot-factor 0)
+        (crnt-rot (trans-rot transform)))
+
+    (when (user-left user)
+      (decf rot-factor))
+
+    (when (user-right user)
+      (incf rot-factor))
+
+    (when (/= 0 rot-factor)
+      (setf (trans-rot transform)
+            (mod (+ crnt-rot (* rot-factor (/ td 1000.0) 3.0)) pi)))))
+
 
 (defclass airmash-window (glop:window)
   ((zoom :initform 1)
    (world :initarg :world)
    (client :initarg :client)))
 
-(defun run (world client)
-  (glop:with-window (win "tutorial 4" 400 300 :major 3 :minor 3 :win-class 'airmash-window)
-    (setf (slot-value win 'client) client)
-    (setf (slot-value win 'world) world)
-    (let* ((vertex-array (gl:gen-vertex-array))
-	   (buffers (gl:gen-buffers 2))
-	   (vertex-buffer (elt buffers 0))
-	   (color-buffer (elt buffers 1))
-	   (program (link-program *tutorial4-shader-source* *tutorial4-fragment-source*))
-	   (matrixId (gl:get-uniform-location program "MVP"))
-	   (projection (perspective 45.0 (/ 4.0 3.0) 0.1 300.0))
-	   (camera (make-vec3 4 10 3))
-	   (model (make-mat4 1.0))
-	   (view (look-at camera #(0 0 0) #(0 1 0)))
-	   MVP
-           (last-update-trans (get-internal-real-time))
-	   (angle 0.0))
-      (gl:bind-vertex-array vertex-array)
-      (gl:bind-buffer :array-buffer vertex-buffer)
-      (load-buffer-array #(0.1 0.0 0.1
-                           0.0 0.0 -.1
-                           -0.1 0.0 0.1
-			   ))
-      (gl:bind-buffer :array-buffer color-buffer)
-      (load-buffer-array #(1.0 0.0 0.0
-			   0.0 1.0 0.0
-			   0.0 0.0 1.0
-			   ))
-      (gl:clear-color 0 0 0 0)
-      (gl:enable :depth-test :cull-face)
-      (gl:depth-func :less)
-      (loop while (glop:dispatch-events win :blocking nil :on-foo nil) do
-	   (setf model (rotation 0 #(0 0 1)))
-	   (setf view (look-at 
-		       (mvprod (rotation (d->r angle) #(0 1 0)) camera)
-		       #(0 0 0) 
-		       #(0 1 0)))
-	   (setf MVP (mprod projection (mprod view model)))
-	   (gl:clear :color-buffer-bit :depth-buffer-bit)
-	   (gl:use-program program)
-	   (gl:uniform-matrix matrixId 4 `#(,MVP) nil)
-	   (enable-vertex-array 0 vertex-buffer)
-	   (enable-vertex-array 1 color-buffer)
-           ;;(gl:draw-arrays :triangles 0 3)
-
-           (ecs:update-components
-            world
-            1
-            #'(lambda (entity-id td transform)
-                (let* ((pos-x (trans-x transform))
-                       (pos-y (trans-y transform))
-                       (scale 1000.0)
-                       (mapped-x (/ pos-x scale))
-                       (mapped-y (/ pos-y scale))
-                       (the-rot (rotation (trans-rot transform) #(0 1 0)))
-                       (the-transl (translation mapped-x 0.01 mapped-y))
-                       (modelmat (mprod the-transl the-rot))
-                       
-                       (mvp2 (mprod projection (mprod view modelmat))))
-                  (gl:uniform-matrix matrixId 4 `#(,mvp2) nil)
-                  (gl:draw-arrays :triangles 0 3)))
-
-            :transforms)
-
-           (ecs:update-components world (- (get-internal-real-time) last-update-trans) #'update-trans :transforms)
-           (setf last-update-trans (get-internal-real-time))
-           ;;(ecs:update-components world #'print-table :users :transforms)
-	   (gl:disable-vertex-attrib-array 0)
-	   (gl:disable-vertex-attrib-array 1)
-	   (glop:swap-buffers win)
-	   (incf angle 0.3))
-      (gl:delete-buffers `(,vertex-buffer ,color-buffer))
-      (gl:delete-program program)
-      (gl:delete-vertex-arrays `(,vertex-array)))))
 
 
 
@@ -144,6 +163,8 @@ void main() {
                (:down 'down)
                (:left 'left)
                (:right 'right))))
+    (if (eq :space key)
+        (send-key client key pressed))
     (when val
       (send-key client key pressed)
       (setf (slot-value user-comp val) pressed))))
@@ -166,7 +187,6 @@ void main() {
   (gl:viewport 0 0 (glop:width event) (glop:height event)))
 
 
-
 (defun main ()
   (let* ((host "wss://game-eu-s1.airma.sh/ffa2")
          (test-host "ws://localhost:3000")
@@ -177,7 +197,25 @@ void main() {
                                 :on-message (alexandria:rcurry #'process world)
                                 :player-name "johndoe"
                                 :player-flag "gb")))
-                                                                     
-
 
     (run world client)))
+
+(defun run (world client)
+  (glop:with-window (win "Airmash" 400 300 :major 3 :minor 3 :win-class 'airmash-window)
+    (setf (slot-value win 'client) client)
+    (setf (slot-value win 'world) world)
+    (let ((rendering-sys (make-instance 'rendering-system-class))
+          (last-update-trans (get-internal-real-time)))
+
+      (loop
+         while (glop:dispatch-events win :blocking nil :on-foo nil)
+         do
+           (ecs:update-components world (- (get-internal-real-time) last-update-trans) #'update-trans :users :transforms)
+           (setf last-update-trans (get-internal-real-time))
+           (run-system rendering-sys world)
+           (glop:swap-buffers win)))))
+
+;; (gl:delete-buffers `(,vertex-buffer ,color-buffer))
+;; (gl:delete-program program)
+;; (gl:delete-vertex-arrays `(,vertex-array)))))
+

@@ -4,6 +4,7 @@
   :components ((:file "package")
                (:file "math-helper")
                (:file "opengl-helper")
+               (:file "shaders")
                (:file "server-messages")
                (:file "player-messages")
                (:file "client")
@@ -14,5 +15,6 @@
                #:alexandria
                #:flexi-streams
                #:cl-opengl
+               #:3bgl-shader
                #:glop
                #:websocket-driver-client))

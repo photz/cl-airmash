@@ -75,7 +75,9 @@
                 (:up 1)
                 (:down 2)
                 (:left 3)
-                (:right 4)))
+                (:right 4)
+                (:space 5)))
+
 
          (cmd (make-player-key-command :seq (slot-value c 'keyseq)
                                        :key val
