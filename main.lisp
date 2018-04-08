@@ -147,14 +147,6 @@
             (mod (+ crnt-rot (* rot-factor (/ td 1000.0) 3.0)) pi)))))
 
 
-(defclass airmash-window (glop:window)
-  ((zoom :initform 1)
-   (world :initarg :world)
-   (client :initarg :client)))
-
-
-
-
 (defun set-key (user-comp client key pressed)
   (check-type key keyword)
   (check-type pressed boolean)
@@ -169,22 +161,15 @@
       (send-key client key pressed)
       (setf (slot-value user-comp val) pressed))))
 
-        
-
-
-(defmethod glop:on-event (window (event glop:key-event))
+(defun on-key (window event world client)
   (case (glop:keysym event)
     (:escape (glop:push-close-event window))
-    (otherwise (set-key (ecs:get-component (slot-value window 'world)
-                                           (slot-value (slot-value window 'client) 'player-id)
+    (otherwise (set-key (ecs:get-component world
+                                           (slot-value client 'player-id)
                                            :users)
-                        (slot-value window 'client)
+                        client
                         (glop:keysym event)
                         (glop:pressed event)))))
-
-
-(defmethod glop:on-event (window (event glop:resize-event))
-  (gl:viewport 0 0 (glop:width event) (glop:height event)))
 
 
 (defun main ()
@@ -198,19 +183,21 @@
                                 :player-name "johndoe"
                                 :player-flag "gb")))
 
-    (run world client)))
-
-(defun run (world client)
-  (glop:with-window (win "Airmash" 400 300 :major 3 :minor 3 :win-class 'airmash-window)
-    (setf (slot-value win 'client) client)
-    (setf (slot-value win 'world) world)
-    (let ((rendering-sys (make-instance 'rendering-system-class))
-          (last-update-trans (get-internal-real-time)))
-
+    (glop:with-window (win "Airmash" 400 300 :major 3 :minor 3)
       (loop
-         while (glop:dispatch-events win :blocking nil :on-foo nil)
-         do
-           (ecs:update-components world (- (get-internal-real-time) last-update-trans) #'update-trans :users :transforms)
+         with rendering-sys = (make-instance 'rendering-system-class)
+         with last-update-trans = (get-internal-real-time)
+         for evt = (glop:next-event win :blocking nil)
+         with running = t
+         while running
+         if evt
+         do (typecase evt
+              (glop:key-event (on-key win evt world client))
+              (glop:close-event (setf running nil))
+              (glop:resize-event (gl:viewport 0 0 (glop:width evt) (glop:height evt)))
+              (t (format t "Unhandled event: ~A~%" evt)))
+         else
+         do (ecs:update-components world (- (get-internal-real-time) last-update-trans) #'update-trans :users :transforms)
            (setf last-update-trans (get-internal-real-time))
            (run-system rendering-sys world)
            (glop:swap-buffers win)))))
