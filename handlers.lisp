@@ -29,10 +29,10 @@
           (trans-speed-y trans) speed-y
           (trans-rot trans) rot
 
-          (user-up user-comp) (slot-value new-keystate 'up)
-          (user-down user-comp) (slot-value new-keystate 'down)
-          (user-left user-comp) (slot-value new-keystate 'left)
-          (user-right user-comp) (slot-value new-keystate 'right))))
+          (user-up user-comp) (flag-to-bool (slot-value new-keystate 'up))
+          (user-down user-comp) (flag-to-bool (slot-value new-keystate 'down))
+          (user-left user-comp) (flag-to-bool (slot-value new-keystate 'left))
+          (user-right user-comp) (flag-to-bool (slot-value new-keystate 'right)))))
 
 
 
@@ -60,10 +60,16 @@
                 (trans-rot trans-comp) rot
 
                 ;; Apply the new keystate
-                (user-up user-comp) (slot-value new-keystate 'up)
-                (user-down user-comp) (slot-value new-keystate 'down)
-                (user-left user-comp) (slot-value new-keystate 'left)
-                (user-right user-comp) (slot-value new-keystate 'right)))))
+                (user-up user-comp) (flag-to-bool (slot-value new-keystate 'up))
+                (user-down user-comp) (flag-to-bool (slot-value new-keystate 'down))
+                (user-left user-comp) (flag-to-bool (slot-value new-keystate 'left))
+                (user-right user-comp) (flag-to-bool (slot-value new-keystate 'right))))))
+
+(defmethod flag-to-bool (flag)
+  (if (= flag 1)
+      t
+      nil))
+      
 
 (defmethod process (client (body server-event-bounce-msg) world)
   (let* ((user-id (slot-value body 'id))
@@ -78,10 +84,10 @@
           (trans-rot trans-comp) (slot-value body 'rotation)
 
           ;; Apply the new keystate
-          (user-up user-comp) (slot-value new-keystate 'up)
-          (user-down user-comp) (slot-value new-keystate 'down)
-          (user-left user-comp) (slot-value new-keystate 'left)
-          (user-right user-comp) (slot-value new-keystate 'right))))
+          (user-up user-comp) (flag-to-bool (slot-value new-keystate 'up))
+          (user-down user-comp) (flag-to-bool (slot-value new-keystate 'down))
+          (user-left user-comp) (flag-to-bool (slot-value new-keystate 'left))
+          (user-right user-comp) (flag-to-bool (slot-value new-keystate 'right)))))
 
 
 (defmethod process (client (body server-event-boost-msg) world)
@@ -112,7 +118,7 @@
        for pos-x = (slot-value user 'pos-x)
        for pos-y = (slot-value user 'pos-y)
        for rot = (slot-value user 'rotation)
-       do (let ()
+       do (progn
             (ecs:add-entity world user-id)
             (ecs:set-component world user-id :transforms
                                (make-trans :x pos-x
