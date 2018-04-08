@@ -2,6 +2,8 @@
   :description "Alternative client for the Airmash top-down shooter"
   :serial t
   :components ((:file "package")
+               (:file "math-helper")
+               (:file "opengl-helper")
                (:file "server-messages")
                (:file "player-messages")
                (:file "client")
