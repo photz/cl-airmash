@@ -7,7 +7,7 @@
 (defun read-coord-24 (stream)
   (let* ((x (read-binary-type '(unsigned-byte 24) stream))
          (res (/ (- (logior (logand (ash x 8) #xff0000)
-                            (ash x -16)) 8388608)
+                            (ash x -16)) (ash 1 23))
                  512.0)))
     (values res 3)))
 
